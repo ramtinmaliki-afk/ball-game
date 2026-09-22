@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+  <title>توپ ماجراجو</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      background: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    h2 {
+      margin: 10px 0 5px;
+    }
+
+    #info {
+      font-size: 16px;
+      margin-bottom: 5px;
+    }
+
+    canvas {
+      display: block;
+      margin: auto;
+      background: #222;
+      border: 2px solid white;
+      max-width: 95vw;
+      max-height: 60vh;
+    }
+
+    #controls {
+      width: 220px;
+      margin: 15px auto;
+      display: grid;
+      grid-template-columns: 70px 70px 70px;
+      grid-template-rows: 60px 60px;
+      gap: 5px;
+      direction: ltr;
+    }
+
+    button {
+      border: none;
+      border-radius: 15px;
+      background: #444;
+      color: white;
+      font-size: 25px;
+      font-weight: bold;
+    }
+
+    button:active {
+      background: #777;
+    }
+
+    #up {
+      grid-column: 2;
+    }
+
+    #left {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    #down {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    #right {
+      grid-column: 3;
+      grid-row: 2;
+    }
+
+    #restart {
+      margin-top: 5px;
+      padding: 10px 25px;
+      font-size: 18px;
+      background: #087f23;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>🎮 توپ ماجراجو</h2>
+
+  <div id="info">
+    مرحله: <span id="level">1</span>
+    |
+    ❤️ <span id="lives">3</span>
+    |
+    🪙 <span id="score">0</span>
+  </div>
+
+  <canvas id="game" width="360" height="500"></canvas>
+
+  <div id="controls">
+    <button id="up">⬆️</button>
+    <button id="left">⬅️</button>
+    <button id="down">⬇️</button>
+    <button id="right">➡️</button>
+  </div>
+
+  <button id="restart">🔄 شروع دوباره</button>
+
+<script>
+"use strict";
+
+/* =========================
+   تنظیمات بازی
+========================= */
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const levelText = document.getElementById("level");
+const livesText = document.getElementById("lives");
+const scoreText = document.getElementById("score");
+
+let level = 1;
+let lives = 3;
+let score = 0;
+
+let gameOver = false;
+let won = false;
+
+const keys = {
+  up: false,
+  down: false,
+  left: false,
+  right: false
+};
+
+/* =========================
+   توپ
+========================= */
+
+const ball = {
+  x: 40,
+  y: 450,
+  radius: 13,
+  speed: 3
+};
+
+/* =========================
+   دروازه
+========================= */
+
+const goal = {
+  x: 300,
+  y: 30,
+  width: 45,
+  height: 45
+};
+
+/* =========================
+   موانع
+========================= */
+
+let obstacles = [];
+
+/* =========================
+   سکه
+========================= */
+
+let coin = {
+  x: 180,
+  y: 250,
+  radius: 9,
+  visible: true
+};
+
+/* =========================
+   ساخت مرحله
+========================= */
+
+function createLevel() {
+
+  obstacles = [];
+
+  const count = 3 + level;
+
+  for (let i = 0; i < count; i++) {
+
+    let x;
+    let y;
+
+    do {
+      x = 40 + Math.random() * 260;
+      y = 80 + Math.random() * 350;
+    } while (
+      Math.hypot(x - ball.x, y - ball.y) < 70
+    );
+
+    obstacles.push({
+      x: x,
+      y: y,
+      width: 45,
+      height: 18,
+      dx: (Math.random() > 0.5 ? 1 : -1) *
+          (1 + level * 0.15)
+    });
+  }
+
+  resetBall();
+
+  coin.x = 50 + Math.random() * 260;
+  coin.y = 100 + Math.random() * 330;
+  coin.visible = true;
+
+  updateInfo();
+}
+
+/* =========================
+   ریست توپ
+========================= */
+
+function resetBall() {
+
+  ball.x = 40;
+  ball.y = 450;
+
+  ball.speed = 2.5 + level * 0.25;
+}
+
+/* =========================
+   اطلاعات
+========================= */
+
+function updateInfo() {
+
+  levelText.textContent = level;
+  livesText.textContent = lives;
+  scoreText.textContent = score;
+}
+
+/* =========================
+   حرکت توپ
+========================= */
+
+function moveBall() {
+
+  if (gameOver || won) return;
+
+  let dx = 0;
+  let dy = 0;
+
+  if (keys.left) dx -= ball.speed;
+  if (keys.right) dx += ball.speed;
+  if (keys.up) dy -= ball.speed;
+  if (keys.down) dy += ball.speed;
+
+  ball.x += dx;
+  ball.y += dy;
+
+  /* برخورد با دیوار */
+
+  if (ball.x - ball.radius < 0) {
+    ball.x = ball.radius;
+  }
+
+  if (ball.x + ball.radius > canvas.width) {
+    ball.x = canvas.width - ball.radius;
+  }
+
+  if (ball.y - ball.radius < 0) {
+    ball.y = ball.radius;
+  }
+
+  if (ball.y + ball.radius > canvas.height) {
+    ball.y = canvas.height - ball.radius;
+  }
+}
+
+/* =========================
+   حرکت موانع
+========================= */
+
+function moveObstacles() {
+
+  for (const o of obstacles) {
+
+    o.x += o.dx;
+
+    if (o.x <= 0 || o.x + o.width >= canvas.width) {
+      o.dx *= -1;
+    }
+  }
+}
+
+/* =========================
+   برخورد توپ و مانع
+========================= */
+
+function collisionWithObstacle() {
+
+  for (const o of obstacles) {
+
+    const closestX = Math.max(
+      o.x,
+      Math.min(ball.x, o.x + o.width)
+    );
+
+    const closestY = Math.max(
+      o.y,
+      Math.min(ball.y, o.y + o.height)
+    );
+
+    const distance = Math.hypot(
+      ball.x - closestX,
+      ball.y - closestY
+    );
+
+    if (distance < ball.radius) {
+
+      lives--;
+
+      updateInfo();
+
+      if (lives <= 0) {
+
+        gameOver = true;
+
+      } else {
+
+        resetBall();
+      }
+
+      return;
+    }
+  }
+}
+
+/* =========================
+   گرفتن سکه
+========================= */
+
+function collectCoin() {
+
+  if (!coin.visible) return;
+
+  const distance = Math.hypot(
+    ball.x - coin.x,
+    ball.y - coin.y
+  );
+
+  if (distance < ball.radius + coin.radius) {
+
+    score += 10;
+    coin.visible = false;
+
+    updateInfo();
+  }
+}
+
+/* =========================
+   رسیدن به دروازه
+========================= */
+
+function checkGoal() {
+
+  if (
+    ball.x + ball.radius > goal.x &&
+    ball.x - ball.radius < goal.x + goal.width &&
+    ball.y + ball.radius > goal.y &&
+    ball.y - ball.radius < goal.y + goal.height
+  ) {
+
+    level++;
+
+    if (level > 10) {
+
+      won = true;
+
+    } else {
+
+      createLevel();
+    }
+
+    updateInfo();
+  }
+}
+
+/* =========================
+   رسم بازی
+========================= */
+
+function draw() {
+
+  ctx.clearRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  /* پس زمینه */
+
+  ctx.fillStyle = "#202020";
+  ctx.fillRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  /* دروازه */
+
+  ctx.fillStyle = "#00cc44";
+  ctx.fillRect(
+    goal.x,
+    goal.y,
+    goal.width,
+    goal.height
+  );
+
+  ctx.fillStyle = "white";
+  ctx.font = "18px Arial";
+  ctx.fillText(
+    "خروج",
+    goal.x + 5,
+    goal.y + 28
+  );
+
+  /* موانع */
+
+  for (const o of obstacles) {
+
+    ctx.fillStyle = "#e53935";
+
+    ctx.fillRect(
+      o.x,
+      o.y,
+      o.width,
+      o.height
+    );
+  }
+
+  /* سکه */
+
+  if (coin.visible) {
+
+    ctx.beginPath();
+
+    ctx.arc(
+      coin.x,
+      coin.y,
+      coin.radius,
+      0,
+      Math.PI * 2
+    );
+
+    ctx.fillStyle = "#ffd700";
+    ctx.fill();
+
+    ctx.closePath();
+  }
+
+  /* توپ */
+
+  ctx.beginPath();
+
+  ctx.arc(
+    ball.x,
+    ball.y,
+    ball.radius,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.fillStyle = "#2196f3";
+  ctx.fill();
+
+  ctx.closePath();
+
+  /* متن پایان */
+
+  if (gameOver) {
+
+    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillRect(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    ctx.fillStyle = "white";
+    ctx.font = "30px Arial";
+    ctx.textAlign = "center";
+
+    ctx.fillText(
+      "💀 باختی!",
+      canvas.width / 2,
+      230
+    );
+
+    ctx.font = "20px Arial";
+
+    ctx.fillText(
+      "دکمه شروع دوباره را بزن",
+      canvas.width / 2,
+      270
+    );
+
+    ctx.textAlign = "start";
+  }
+
+  if (won) {
+
+    ctx.fillStyle = "rgba(0,0,0,0.75)";
+    ctx.fillRect(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    ctx.fillStyle = "#ffd700";
+    ctx.font = "30px Arial";
+    ctx.textAlign = "center";
+
+    ctx.fillText(
+      "🏆 برنده شدی!",
+      canvas.width / 2,
+      240
+    );
+
+    ctx.font = "20px Arial";
+
+    ctx.fillText(
+      "همه ۱۰ مرحله را تمام کردی",
+      canvas.width / 2,
+      280
+    );
+
+    ctx.textAlign = "start";
+  }
+}
+
+/* =========================
+   حلقه اصلی بازی
+========================= */
+
+function gameLoop() {
+
+  moveBall();
+
+  moveObstacles();
+
+  collisionWithObstacle();
+
+  collectCoin();
+
+  checkGoal();
+
+  draw();
+
+  requestAnimationFrame(gameLoop);
+}
+
+/* =========================
+   کنترل‌های کیبورد
+========================= */
+
+document.addEventListener("keydown", function(e) {
+
+  if (
+    e.key === "ArrowUp" ||
+    e.key.toLowerCase() === "w"
+  ) {
+    keys.up = true;
+  }
+
+  if (
+    e.key === "ArrowDown" ||
+    e.key.toLowerCase() === "s"
+  ) {
+    keys.down = true;
+  }
+
+  if (
+    e.key === "ArrowLeft" ||
+    e.key.toLowerCase() === "a"
+  ) {
+    keys.left = true;
+  }
+
+  if (
+    e.key === "ArrowRight" ||
+    e.key.toLowerCase() === "d"
+  ) {
+    keys.right = true;
+  }
+});
+
+document.addEventListener("keyup", function(e) {
+
+  if (
+    e.key === "ArrowUp" ||
+    e.key.toLowerCase() === "w"
+  ) {
+    keys.up = false;
+  }
+
+  if (
+    e.key === "ArrowDown" ||
+    e.key.toLowerCase() === "s"
+  ) {
+    keys.down = false;
+  }
+
+  if (
+    e.key === "ArrowLeft" ||
+    e.key.toLowerCase() === "a"
+  ) {
+    keys.left = false;
+  }
+
+  if (
+    e.key === "ArrowRight" ||
+    e.key.toLowerCase() === "d"
+  ) {
+    keys.right = false;
+  }
+});
+
+/* =========================
+   دکمه‌های گوشی
+========================= */
+
+function buttonControl(id, direction) {
+
+  const button = document.getElementById(id);
+
+  button.addEventListener("touchstart", function(e) {
+
+    e.preventDefault();
+    keys[direction] = true;
+
+  });
+
+  button.addEventListener("touchend", function(e) {
+
+    e.preventDefault();
+    keys[direction] = false;
+
+  });
+
+  button.addEventListener("touchcancel", function(e) {
+
+    e.preventDefault();
+    keys[direction] = false;
+
+  });
+
+  /* برای تست با ماوس */
+
+  button.addEventListener("mousedown", function() {
+    keys[direction] = true;
+  });
+
+  button.addEventListener("mouseup", function() {
+    keys[direction] = false;
+  });
+
+  button.addEventListener("mouseleave", function() {
+    keys[direction] = false;
+  });
+}
+
+buttonControl("up", "up");
+buttonControl("down", "down");
+buttonControl("left", "left");
+buttonControl("right", "right");
+
+/* =========================
+   شروع دوباره
+========================= */
+
+document.getElementById("restart").addEventListener(
+  "click",
+  function() {
+
+    level = 1;
+    lives = 3;
+    score = 0;
+
+    gameOver = false;
+    won = false;
+
+    createLevel();
+  }
+);
+
+/* =========================
+   شروع بازی
+========================= */
+
+createLevel();
+gameLoop();
+
+</script>
+
+</body>
+</html>
